@@ -19,6 +19,31 @@ export const { auth, handlers, signIn, signOut } = NextAuth((req) => {
         allowDangerousEmailAccountLinking: true,
       }),
     ],
+    callbacks: {
+      async jwt({ token, user, profile }) {
+        token.picture = profile?.avatar_url || null
+        token.name = profile?.name || null
+        token.role = user?.role || null
+        return token
+      },
+      async session({ session, user, token }) {
+        //console.log('session', session, 'user', user, 'token', token)
+        session.user = session.user || {}
+
+        if (!session.user.role && user) {
+          session.user.role = user.role || null
+        }
+
+        if (!session.user.id) {
+          if (user && user.id) {
+            session.user.id = user.id
+          } else if (token && token.sub) {
+            session.user.id = token.sub
+          }
+        }
+        return session
+      },
+    },
   }
 })
 
@@ -35,6 +60,9 @@ export function PayloadAdapter(): Adapter {
       }
 
       const payload = await getPayloadInstance()
+      if (process.env.AUTH_VERPOSE) {
+        console.log('createUser', data)
+      }
       return await payload.create({
         collection: collectionNames.users,
         data,
@@ -47,6 +75,9 @@ export function PayloadAdapter(): Adapter {
         collection: collectionNames.users,
         id,
       })
+      if (process.env.AUTH_VERPOSE) {
+        console.log('getUser', user, 'id', id)
+      }
       return user || null
     },
 
@@ -56,11 +87,17 @@ export function PayloadAdapter(): Adapter {
         collection: collectionNames.users,
         where: { email: { equals: email } },
       })
+      if (process.env.AUTH_VERPOSE) {
+        console.log('getUserByEmail', docs.at(0), 'email', email)
+      }
       return docs.at(0) || null
     },
 
     async updateUser(data) {
       const payload = await getPayloadInstance()
+      if (process.env.AUTH_VERPOSE) {
+        console.log('updateUser', data)
+      }
       return await payload.update({
         collection: collectionNames.users,
         id: data.id,
@@ -70,6 +107,9 @@ export function PayloadAdapter(): Adapter {
 
     async deleteUser(id) {
       const payload = await getPayloadInstance()
+      if (process.env.AUTH_VERPOSE) {
+        console.log('deleteUser', id)
+      }
       await payload.delete({
         collection: collectionNames.users,
         id,
@@ -82,6 +122,9 @@ export function PayloadAdapter(): Adapter {
         collection: collectionNames.users,
         id: data.userId,
       })
+      if (process.env.AUTH_VERPOSE) {
+        console.log('linkAccount', user, 'data', data)
+      }
       if (!user) return null
       const updatedUser = await payload.update({
         collection: collectionNames.users,
@@ -90,6 +133,9 @@ export function PayloadAdapter(): Adapter {
           accounts: [...user.accounts, data],
         },
       })
+      if (process.env.AUTH_VERPOSE) {
+        console.log('linkAccount -> updatedUser', updatedUser)
+      }
       return updatedUser
     },
 
@@ -120,6 +166,9 @@ export function PayloadAdapter(): Adapter {
         collection: collectionNames.users,
         id: data.userId,
       })
+      if (process.env.AUTH_VERPOSE) {
+        console.log('createVerificationToken', user, 'id', data)
+      }
       if (!user) return null
       const updatedUser = await payload.update({
         collection: collectionNames.users,
@@ -158,11 +207,24 @@ export function PayloadAdapter(): Adapter {
           'accounts.providerAccountId': { equals: providerAccountId },
         },
       })
+      if (process.env.AUTH_VERPOSE) {
+        console.log(
+          'getUserByAccount',
+          docs.at(0),
+          'providerAccountId',
+          providerAccountId,
+          'provider',
+          provider,
+        )
+      }
       return docs.at(0) || null
     },
 
     async createSession({ sessionToken, userId, expires }) {
       const payload = await getPayloadInstance()
+      if (process.env.AUTH_VERPOSE) {
+        console.log('createSession', sessionToken, userId, expires)
+      }
       return await payload.create({
         collection: collectionNames.sessions,
         data: { sessionToken, userId, expires },
@@ -175,6 +237,9 @@ export function PayloadAdapter(): Adapter {
         collection: collectionNames.sessions,
         where: { sessionToken: { equals: sessionToken } },
       })
+      if (process.env.AUTH_VERPOSE) {
+        console.log('getSessionAndUser', sessions, 'id', id, 'sessionToken', sessionToken)
+      }
       if (sessions.length === 0) return null
       const session = sessions.at(0)
       const user = await payload.findByID({
@@ -190,6 +255,9 @@ export function PayloadAdapter(): Adapter {
         collection: collectionNames.sessions,
         where: { sessionToken: { equals: sessionToken } },
       })
+      if (process.env.AUTH_VERPOSE) {
+        console.log('updateSession', sessionToken, expires)
+      }
       if (docs.length === 0) return null
       const session = docs.at(0)
       return await payload.update({

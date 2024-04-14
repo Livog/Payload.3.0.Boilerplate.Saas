@@ -17,6 +17,7 @@
     "node": ">=18.19.0"
   },
   "dependencies": {
+    "@auth/core": "^0.29.0",
     "@payloadcms/db-mongodb": "3.0.0-beta.10",
     "@payloadcms/db-postgres": "3.0.0-beta.10",
     "@payloadcms/next": "3.0.0-beta.10",
