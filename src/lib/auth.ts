@@ -1,284 +1,202 @@
-// @ts-nocheck
-import NextAuth from 'next-auth'
+import { getPayload } from '@/lib/payload'
+import { COLLECTION_SLUG_USER } from '@/payload/collections/users'
+import fetchJson from '@/utils/fetchJson'
 import configPromise from '@payload-config'
-import type { Adapter } from 'next-auth/adapters'
-import { GeneratedTypes, getPayload } from 'payload'
-import GitHub from 'next-auth/providers/github'
+import { GitHub } from 'arctic'
 import { randomBytes } from 'crypto'
+import { SignJWT } from 'jose'
+import { cookies } from 'next/headers'
+import type { Payload } from 'payload'
+import { SanitizedCollectionConfig } from 'payload/types'
+import { generatePayloadCookie } from '~/node_modules/payload/dist/auth/cookies'
+import { getFieldsToSign } from '~/node_modules/payload/dist/auth/getFieldsToSign'
+import { User } from '~/payload-types'
 
-async function getPayloadInstance(): Promise<ReturnType<typeof getPayload>> {
-  return await getPayload({ config: await configPromise })
+const DEFAULE_ROLE = 'user' as const
+
+type UserIdentifier = {
+  collectionSlug: string
+} & ({ id: string } | { email: string } | { provider: string; providerAccountId: string })
+
+export const oauthConfigs = {
+  github: {
+    cookieName: 'github_oauth_state',
+    signInUrl: '/api/auth/github',
+    async fetchUser(url: URL): Promise<{ user: User; providerId: string }> {
+      const code = url.searchParams.get('code')
+      if (!code) throw new Error('Authorization code not found.')
+
+      const tokens = await github.validateAuthorizationCode(code)
+      const githubUser = await fetchJson('https://api.github.com/user', {
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+        },
+      })
+
+      return {
+        providerId: String(githubUser.id),
+        /** @ts-ignore */
+        user: {
+          email: githubUser.email,
+          name: githubUser.name,
+          imageUrl: githubUser.avatar_url,
+          role: DEFAULE_ROLE,
+          accounts: [
+            {
+              provider: 'github',
+              providerAccountId: String(githubUser.id),
+            },
+          ],
+        },
+      }
+    },
+  },
+} as const
+
+export const github = new GitHub(process.env.AUTH_GITHUB_ID!, process.env.AUTH_GITHUB_SECRET!)
+
+export async function generatePayloadAuthCookie({
+  payload,
+  user,
+  usersCollection,
+}: {
+  payload: Payload
+  user: User
+  usersCollection: SanitizedCollectionConfig
+}) {
+  const fieldsToSign = getFieldsToSign({
+    collectionConfig: usersCollection,
+    email: user.email,
+    user: {
+      ...user,
+      /** @ts-ignore */
+      collection: usersCollection.slug,
+    },
+  })
+
+  const now = Math.floor(Date.now() / 1000)
+  const tokenExpiration =
+    typeof usersCollection?.auth?.tokenExpiration === 'number'
+      ? usersCollection.auth.tokenExpiration
+      : 7200
+
+  const expTime = now + tokenExpiration
+
+  const token = await new SignJWT(fieldsToSign)
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setIssuedAt()
+    .setExpirationTime(expTime)
+    .sign(new TextEncoder().encode(payload.secret))
+
+  const cookie = generatePayloadCookie({
+    collectionConfig: usersCollection,
+    payload,
+    token,
+  })
+
+  return cookie
 }
 
-export const { auth, handlers, signIn, signOut } = NextAuth((req) => {
-  return {
-    adapter: PayloadAdapter(),
-    session: { strategy: 'jwt' },
-    providers: [
-      GitHub({
-        allowDangerousEmailAccountLinking: true,
-      }),
-    ],
-    callbacks: {
-      async jwt({ token, user, profile }) {
-        token.picture = profile?.avatar_url || null
-        token.name = profile?.name || null
-        token.role = user?.role || null
-        return token
-      },
-      async session({ session, user, token }) {
-        //console.log('session', session, 'user', user, 'token', token)
-        session.user = session.user || {}
+export async function findOrCreateUser(
+  criteria: UserIdentifier,
+  userData: User,
+): Promise<{ user: User; payload: Payload } | null> {
+  const payload = await getPayload()
 
-        if (!session.user.role && user) {
-          session.user.role = user.role || null
-        }
-
-        if (!session.user.id) {
-          if (user && user.id) {
-            session.user.id = user.id
-          } else if (token && token.sub) {
-            session.user.id = token.sub
-          }
-        }
-        return session
-      },
-    },
-  }
-})
-
-export function PayloadAdapter(): Adapter {
-  const collectionNames: Record<string, keyof GeneratedTypes['collections']> = {
-    users: 'users',
-    sessions: 'sessions',
+  let query = {}
+  if ('id' in criteria) {
+    query = { id: { equals: criteria.id } }
+  } else if ('email' in criteria) {
+    query = { email: { equals: criteria.email } }
+  } else if ('provider' in criteria && 'providerAccountId' in criteria) {
+    query = {
+      'accounts.provider': { equals: criteria.provider },
+      'accounts.providerAccountId': { equals: criteria.providerAccountId },
+    }
   }
 
-  return {
-    async createUser(data) {
-      if (!data.password) {
-        data.password = randomBytes(32).toString('hex')
-      }
+  if (Object.values(query).length === 0) {
+    throw new Error('No query provided')
+  }
 
-      const payload = await getPayloadInstance()
-      if (process.env.AUTH_VERPOSE) {
-        console.log('createUser', data)
-      }
-      return await payload.create({
-        collection: collectionNames.users,
-        data,
-      })
-    },
+  const { docs } = await payload.find({
+    /** @ts-ignore */
+    collection: criteria.collectionSlug,
+    where: query,
+  })
 
-    async getUser(id) {
-      const payload = await getPayloadInstance()
-      const user = await payload.findByID({
-        collection: collectionNames.users,
-        id,
-      })
-      if (process.env.AUTH_VERPOSE) {
-        console.log('getUser', user, 'id', id)
-      }
-      return user || null
-    },
+  let user = (docs?.at(0) as User) || null
 
-    async getUserByEmail(email) {
-      const payload = await getPayloadInstance()
-      const { docs } = await payload.find({
-        collection: collectionNames.users,
-        where: { email: { equals: email } },
-      })
-      if (process.env.AUTH_VERPOSE) {
-        console.log('getUserByEmail', docs.at(0), 'email', email)
-      }
-      return docs.at(0) || null
-    },
+  if (!user) {
+    user = (await payload.create({
+      /** @ts-ignore */
+      collection: criteria.collectionSlug,
+      data: {
+        ...userData,
+        /** @ts-ignore */
+        password: randomBytes(32).toString('hex'), // Generate a random password
+      },
+    })) as User
+  }
 
-    async updateUser(data) {
-      const payload = await getPayloadInstance()
-      if (process.env.AUTH_VERPOSE) {
-        console.log('updateUser', data)
-      }
-      return await payload.update({
-        collection: collectionNames.users,
-        id: data.id,
-        data,
-      })
-    },
+  return { user, payload }
+}
 
-    async deleteUser(id) {
-      const payload = await getPayloadInstance()
-      if (process.env.AUTH_VERPOSE) {
-        console.log('deleteUser', id)
-      }
-      await payload.delete({
-        collection: collectionNames.users,
-        id,
-      })
-    },
+type AuthCookieParams = {
+  provider: keyof typeof oauthConfigs
+  requestUrl: string
+}
 
-    async linkAccount(data) {
-      const payload = await getPayloadInstance()
-      const user = await payload.findByID({
-        collection: collectionNames.users,
-        id: data.userId,
+export async function getAuthResponseWithCookie({
+  provider,
+  requestUrl,
+}: AuthCookieParams): Promise<Response> {
+  const url = new URL(requestUrl)
+  const state = url.searchParams.get('state')
+  const storedState = cookies().get(oauthConfigs[provider].cookieName)?.value ?? null
+
+  if (!state || !storedState || state !== storedState) {
+    return new Response(null, { status: 400, statusText: 'Invalid or missing state.' })
+  }
+
+  try {
+    const { user: userData, providerId } = await oauthConfigs[provider].fetchUser(url)
+    const userResponse = await findOrCreateUser(
+      {
+        provider,
+        providerAccountId: providerId,
+        collectionSlug: COLLECTION_SLUG_USER,
+      },
+      userData,
+    )
+
+    if (!userResponse) return new Response('Error finding or creating user.', { status: 500 })
+    const config = await configPromise
+    const sanitizedUsersCollectionConfig = config.collections.find(
+      (c) => c.slug === COLLECTION_SLUG_USER,
+    )
+    if (!sanitizedUsersCollectionConfig)
+      return new Response('Could not find users collection.', { status: 500 })
+    const { user, payload } = userResponse
+    if (user) {
+      const cookie = await generatePayloadAuthCookie({
+        payload,
+        user,
+        usersCollection: sanitizedUsersCollectionConfig,
       })
-      if (process.env.AUTH_VERPOSE) {
-        console.log('linkAccount', user, 'data', data)
-      }
-      if (!user) return null
-      const updatedUser = await payload.update({
-        collection: collectionNames.users,
-        id: data.userId,
-        data: {
-          accounts: [...user.accounts, data],
+      cookies().delete(oauthConfigs[provider].cookieName)
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: '/',
+          'Set-Cookie': cookie,
         },
       })
-      if (process.env.AUTH_VERPOSE) {
-        console.log('linkAccount -> updatedUser', updatedUser)
-      }
-      return updatedUser
-    },
+    }
 
-    async unlinkAccount({ userId, provider, providerAccountId }) {
-      const payload = await getPayloadInstance()
-      const user = await payload.findByID({
-        collection: collectionNames.users,
-        id: userId,
-      })
-      if (!Array.isArray(user?.accounts)) return null
-      const updatedAccounts = user.accounts.filter(
-        (account) =>
-          account.provider !== provider || account.providerAccountId !== providerAccountId,
-      )
-      const updatedUser = await payload.update({
-        collection: collectionNames.users,
-        id: userId,
-        data: {
-          accounts: updatedAccounts,
-        },
-      })
-      return updatedUser
-    },
-
-    async createVerificationToken(data) {
-      const payload = await getPayloadInstance()
-      const user = await payload.findByID({
-        collection: collectionNames.users,
-        id: data.userId,
-      })
-      if (process.env.AUTH_VERPOSE) {
-        console.log('createVerificationToken', user, 'id', data)
-      }
-      if (!user) return null
-      const updatedUser = await payload.update({
-        collection: collectionNames.users,
-        id: data.userId,
-        data: {
-          verificationTokens: [...user.verificationTokens, data],
-        },
-      })
-      return updatedUser
-    },
-
-    async useVerificationToken({ userId, token }) {
-      const payload = await getPayloadInstance()
-      const user = await payload.findByID({
-        collection: collectionNames.users,
-        id: userId,
-      })
-      if (!user) return null
-      const updatedTokens = user.verificationTokens.filter((t) => t.token !== token)
-      const tokenData = user.verificationTokens.find((t) => t.token === token)
-      await payload.update({
-        collection: collectionNames.users,
-        id: userId,
-        data: {
-          verificationTokens: updatedTokens,
-        },
-      })
-      return tokenData || null
-    },
-    async getUserByAccount({ providerAccountId, provider }) {
-      const payload = await getPayloadInstance()
-      const { docs } = await payload.find({
-        collection: collectionNames.users,
-        where: {
-          'accounts.provider': { equals: provider },
-          'accounts.providerAccountId': { equals: providerAccountId },
-        },
-      })
-      if (process.env.AUTH_VERPOSE) {
-        console.log(
-          'getUserByAccount',
-          docs.at(0),
-          'providerAccountId',
-          providerAccountId,
-          'provider',
-          provider,
-        )
-      }
-      return docs.at(0) || null
-    },
-
-    async createSession({ sessionToken, userId, expires }) {
-      const payload = await getPayloadInstance()
-      if (process.env.AUTH_VERPOSE) {
-        console.log('createSession', sessionToken, userId, expires)
-      }
-      return await payload.create({
-        collection: collectionNames.sessions,
-        data: { sessionToken, userId, expires },
-      })
-    },
-
-    async getSessionAndUser(sessionToken) {
-      const payload = await getPayloadInstance()
-      const { docs: sessions } = await payload.find({
-        collection: collectionNames.sessions,
-        where: { sessionToken: { equals: sessionToken } },
-      })
-      if (process.env.AUTH_VERPOSE) {
-        console.log('getSessionAndUser', sessions, 'id', id, 'sessionToken', sessionToken)
-      }
-      if (sessions.length === 0) return null
-      const session = sessions.at(0)
-      const user = await payload.findByID({
-        collection: collectionNames.users,
-        id: session.userId,
-      })
-      return user ? { session, user } : null
-    },
-
-    async updateSession({ sessionToken, expires }) {
-      const payload = await getPayloadInstance()
-      const { docs } = await payload.find({
-        collection: collectionNames.sessions,
-        where: { sessionToken: { equals: sessionToken } },
-      })
-      if (process.env.AUTH_VERPOSE) {
-        console.log('updateSession', sessionToken, expires)
-      }
-      if (docs.length === 0) return null
-      const session = docs.at(0)
-      return await payload.update({
-        collection: collectionNames.sessions,
-        id: session.id,
-        data: { expires },
-      })
-    },
-
-    async deleteSession(sessionToken) {
-      const payload = await getPayloadInstance()
-      const { docs } = await payload.find({
-        collection: collectionNames.sessions,
-        where: { sessionToken: { equals: sessionToken } },
-      })
-      if (docs.length > 0) {
-        await payload.delete({
-          collection: collectionNames.sessions,
-          id: docs.at(0)?.id,
-        })
-      }
-    },
+    return new Response(null, { status: 302, headers: { Location: '/' } })
+  } catch (e) {
+    console.error('OAuth Error:')
+    return new Response(null, { status: 500, statusText: 'OAuth process error.' })
   }
 }

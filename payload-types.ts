@@ -26,6 +26,9 @@ export interface Config {
  */
 export interface User {
   id: string;
+  name?: string | null;
+  imageUrl?: string | null;
+  role?: ('admin' | 'user') | null;
   accounts?:
     | {
         provider?: string | null;
@@ -35,6 +38,7 @@ export interface User {
     | null;
   verificationTokens?:
     | {
+        identifier?: string | null;
         token?: string | null;
         expires?: string | null;
         id?: string | null;

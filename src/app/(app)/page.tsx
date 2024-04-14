@@ -1,7 +1,9 @@
 import { OAuthLoginButtons } from '@/components/OAuthLoginButtons'
-import React from 'react'
+import { getUser } from '@/lib/payload'
 
-const Page = () => {
+const Page = async () => {
+  const user = await getUser()
+  console.log('user', user)
   return (
     <article>
       <OAuthLoginButtons />

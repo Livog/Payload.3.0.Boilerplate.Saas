@@ -1,3 +1,3 @@
-export { user, session } from './user'
-export { page } from './page'
+export { users } from './users'
+export { pages } from './pages'
 export { media } from './media'
