@@ -1,13 +1,10 @@
 import React from 'react'
-import './globals.scss'
+import '@/app/style.css'
 
-/* Our app sits here to not cause any conflicts with payload's root layout  */
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <html>
-      <body>
-        <main>{children}</main>
-      </body>
+      <body>{children}</body>
     </html>
   )
 }

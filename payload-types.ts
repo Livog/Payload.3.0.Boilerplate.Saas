@@ -8,13 +8,48 @@
 
 export interface Config {
   collections: {
+    users: User;
     pages: Page;
     media: Media;
-    users: User;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
   };
   globals: {};
+  locale: null;
+  user: User & {
+    collection: 'users';
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "users".
+ */
+export interface User {
+  id: string;
+  accounts?:
+    | {
+        provider?: string | null;
+        providerAccountId?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  verificationTokens?:
+    | {
+        token?: string | null;
+        expires?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  password?: string | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -47,7 +82,6 @@ export interface Page {
  */
 export interface Media {
   id: string;
-  text?: string | null;
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -57,23 +91,6 @@ export interface Media {
   filesize?: number | null;
   width?: number | null;
   height?: number | null;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "users".
- */
-export interface User {
-  id: string;
-  updatedAt: string;
-  createdAt: string;
-  email: string;
-  resetPasswordToken?: string | null;
-  resetPasswordExpiration?: string | null;
-  salt?: string | null;
-  hash?: string | null;
-  loginAttempts?: number | null;
-  lockUntil?: string | null;
-  password?: string | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
