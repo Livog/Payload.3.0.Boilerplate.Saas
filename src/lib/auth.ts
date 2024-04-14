@@ -4,6 +4,7 @@ import configPromise from '@payload-config'
 import type { Adapter } from 'next-auth/adapters'
 import { GeneratedTypes, getPayload } from 'payload'
 import GitHub from 'next-auth/providers/github'
+import { randomBytes } from 'crypto'
 
 async function getPayloadInstance(): Promise<ReturnType<typeof getPayload>> {
   return await getPayload({ config: await configPromise })
@@ -29,6 +30,10 @@ export function PayloadAdapter(): Adapter {
 
   return {
     async createUser(data) {
+      if (!data.password) {
+        data.password = randomBytes(32).toString('hex')
+      }
+
       const payload = await getPayloadInstance()
       return await payload.create({
         collection: collectionNames.users,
