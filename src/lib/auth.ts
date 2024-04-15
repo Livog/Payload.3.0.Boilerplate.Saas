@@ -5,12 +5,19 @@ import type { Adapter } from 'next-auth/adapters'
 import { GeneratedTypes, getPayload } from 'payload'
 import GitHub from 'next-auth/providers/github'
 import { randomBytes } from 'crypto'
+import { getFieldsToSign } from '~/node_modules/payload/dist/auth/getFieldsToSign'
 
 async function getPayloadInstance(): Promise<ReturnType<typeof getPayload>> {
   return await getPayload({ config: await configPromise })
 }
 
 export const { auth, handlers, signIn, signOut } = NextAuth((req) => {
+  const getSanitizedUserCollection = async () => {
+    const config = await configPromise
+    const sanitizedUsersCollection = config.collections.find((c) => c.slug === 'users')
+    if (!sanitizedUsersCollection) return null
+    return sanitizedUsersCollection
+  }
   return {
     adapter: PayloadAdapter(),
     session: { strategy: 'jwt' },
@@ -20,27 +27,37 @@ export const { auth, handlers, signIn, signOut } = NextAuth((req) => {
       }),
     ],
     callbacks: {
-      async jwt({ token, user, profile }) {
-        token.picture = profile?.avatar_url || null
-        token.name = profile?.name || null
-        token.role = user?.role || null
+      async jwt({ token, user }) {
+        const sanitizedUsersCollection = await getSanitizedUserCollection()
+        if (!sanitizedUsersCollection || !user) return token
+        const fieldsToSign = getFieldsToSign({
+          user,
+          email: user.email,
+          collectionConfig: sanitizedUsersCollection,
+        })
+        token = {
+          ...fieldsToSign,
+          ...token,
+          collection: 'users',
+        }
         return token
       },
-      async session({ session, user, token }) {
-        //console.log('session', session, 'user', user, 'token', token)
+      async session({ session, token }) {
         session.user = session.user || {}
+        const sanitizedUsersCollection = await getSanitizedUserCollection()
+        if (!sanitizedUsersCollection || !token) return session
+        const fieldsToSign = getFieldsToSign({
+          user: token,
+          email: session.user.email,
+          collectionConfig: sanitizedUsersCollection,
+        })
 
-        if (!session.user.role && user) {
-          session.user.role = user.role || null
+        session.user = {
+          ...fieldsToSign,
+          ...session.user,
+          collection: 'users',
         }
 
-        if (!session.user.id) {
-          if (user && user.id) {
-            session.user.id = user.id
-          } else if (token && token.sub) {
-            session.user.id = token.sub
-          }
-        }
         return session
       },
     },

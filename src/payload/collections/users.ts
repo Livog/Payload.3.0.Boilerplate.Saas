@@ -1,10 +1,9 @@
-import { auth, signOut } from '@/lib/auth'
-import { cookies } from 'next/headers'
+import { auth } from '@/lib/auth'
 import type { CollectionConfig } from 'payload/types'
 
 export const COLLECTION_SLUG_USER = 'users'
 
-export const user: CollectionConfig = {
+export const users: CollectionConfig = {
   slug: COLLECTION_SLUG_USER,
   auth: {
     strategies: [
@@ -42,7 +41,9 @@ export const user: CollectionConfig = {
   },
   access: {},
   fields: [
-    { name: 'role', type: 'select', options: ['admin', 'user'] },
+    { name: 'name', type: 'text', saveToJWT: true },
+    { name: 'imageUrl', type: 'text', saveToJWT: true },
+    { name: 'role', type: 'select', options: ['admin', 'user'], saveToJWT: true },
     {
       name: 'accounts',
       type: 'array',
@@ -75,7 +76,7 @@ export const user: CollectionConfig = {
   ],
 }
 
-export const session: CollectionConfig = {
+export const sessions: CollectionConfig = {
   slug: 'sessions',
   auth: false,
   access: {
