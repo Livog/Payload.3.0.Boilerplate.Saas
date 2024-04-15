@@ -1,10 +1,51 @@
 import { auth } from '@/lib/auth'
 import type { CollectionConfig } from 'payload/types'
+import { parseCookies, serializeCookie } from 'oslo/cookie'
 
 export const COLLECTION_SLUG_USER = 'users'
 
 export const users: CollectionConfig = {
   slug: COLLECTION_SLUG_USER,
+  endpoints: [
+    {
+      path: '/refresh-token',
+      method: 'post',
+      async handler(request) {
+        const cookies = parseCookies(request.headers.get('Cookie') || '')
+        const req = {
+          headers: request.headers,
+          cookies: cookies.size > 0 ? Object.fromEntries(cookies) : null,
+        }
+        const res = new Response()
+
+        /** @ts-ignore */
+        const session = await auth(req, res)
+        const responseCookies = parseCookies(String(res.headers.getSetCookie()) || '')
+        const refreshedToken = responseCookies.get('__Secure-authjs.session-token') || responseCookies.get('authjs.session-token') || null
+
+        res.headers.set('Content-Type', 'application/json; charset=utf-8')
+
+        if (!session || !refreshedToken) {
+          res.headers.set('Set-Cookie', serializeCookie('__Secure-authjs.session-token', '', { expires: new Date(0) }))
+          res.headers.set('Set-Cookie', serializeCookie('authjs.session-token', '', { expires: new Date(0) }))
+          return new Response(JSON.stringify({ message: 'Token refresh failed' }), { status: 401, headers: res.headers })
+        }
+
+        return new Response(
+          JSON.stringify({
+            message: 'Token refresh successful',
+            refreshedToken: refreshedToken,
+            exp: Math.floor(new Date(String(session?.expires)).getTime() / 1000),
+            user: session?.user,
+          }),
+          {
+            status: 200,
+            headers: res.headers,
+          },
+        )
+      },
+    },
+  ],
   auth: {
     strategies: [
       {

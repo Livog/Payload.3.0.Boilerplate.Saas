@@ -20,6 +20,9 @@ export const { auth, handlers, signIn, signOut } = NextAuth((req) => {
   }
   return {
     adapter: PayloadAdapter(),
+    jwt: {
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+    },
     session: { strategy: 'jwt' },
     providers: [
       GitHub({
@@ -29,15 +32,22 @@ export const { auth, handlers, signIn, signOut } = NextAuth((req) => {
     callbacks: {
       async jwt({ token, user }) {
         const sanitizedUsersCollection = await getSanitizedUserCollection()
-        if (!sanitizedUsersCollection || !user) return token
-        const fieldsToSign = getFieldsToSign({
-          user,
-          email: user.email,
+        const userId = token?.id || token?.sub || user?.id
+        const freshUser = await (
+          await getPayloadInstance()
+        ).findByID({
+          collection: sanitizedUsersCollection.slug,
+          id: userId,
+        })
+        if (!sanitizedUsersCollection || !freshUser) return token
+        const tokenUserFields = getFieldsToSign({
+          user: freshUser,
+          email: freshUser.email,
           collectionConfig: sanitizedUsersCollection,
         })
         token = {
-          ...fieldsToSign,
           ...token,
+          ...tokenUserFields,
           collection: 'users',
         }
         return token
@@ -163,10 +173,7 @@ export function PayloadAdapter(): Adapter {
         id: userId,
       })
       if (!Array.isArray(user?.accounts)) return null
-      const updatedAccounts = user.accounts.filter(
-        (account) =>
-          account.provider !== provider || account.providerAccountId !== providerAccountId,
-      )
+      const updatedAccounts = user.accounts.filter((account) => account.provider !== provider || account.providerAccountId !== providerAccountId)
       const updatedUser = await payload.update({
         collection: collectionNames.users,
         id: userId,
@@ -225,14 +232,7 @@ export function PayloadAdapter(): Adapter {
         },
       })
       if (process.env.AUTH_VERPOSE) {
-        console.log(
-          'getUserByAccount',
-          docs.at(0),
-          'providerAccountId',
-          providerAccountId,
-          'provider',
-          provider,
-        )
+        console.log('getUserByAccount', docs.at(0), 'providerAccountId', providerAccountId, 'provider', provider)
       }
       return docs.at(0) || null
     },
