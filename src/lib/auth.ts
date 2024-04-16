@@ -3,10 +3,10 @@ import 'server-only'
 import NextAuth from 'next-auth'
 import configPromise from '@payload-config'
 import type { Adapter } from 'next-auth/adapters'
-import { GeneratedTypes, getPayload } from 'payload'
+import { type GeneratedTypes, getPayload } from 'payload'
 import GitHub from 'next-auth/providers/github'
 import { randomBytes } from 'crypto'
-import { getFieldsToSign } from '~/node_modules/payload/dist/auth/getFieldsToSign'
+import { getFieldsToSign } from 'payload/auth'
 
 async function getPayloadInstance(): Promise<ReturnType<typeof getPayload>> {
   return await getPayload({ config: await configPromise })
