@@ -8,8 +8,7 @@ import { SignJWT } from 'jose'
 import { cookies } from 'next/headers'
 import type { Payload } from 'payload'
 import { SanitizedCollectionConfig } from 'payload/types'
-import { generatePayloadCookie } from '~/node_modules/payload/dist/auth/cookies'
-import { getFieldsToSign } from '~/node_modules/payload/dist/auth/getFieldsToSign'
+import { getFieldsToSign, generatePayloadCookie } from 'payload/auth'
 import { User } from '~/payload-types'
 
 const DEFAULE_ROLE = 'user' as const
