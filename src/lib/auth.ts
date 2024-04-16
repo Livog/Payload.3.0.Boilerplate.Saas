@@ -1,4 +1,5 @@
 // @ts-nocheck
+import 'server-only'
 import NextAuth from 'next-auth'
 import configPromise from '@payload-config'
 import type { Adapter } from 'next-auth/adapters'

@@ -1,6 +1,10 @@
 import { getToken } from '@auth/core/jwt'
 import { NextResponse, type NextRequest } from 'next/server'
 
+export const config = {
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+}
+
 export default async function middleware(request: NextRequest) {
   let cookieName = 'authjs.session-token'
   if (process.env.NODE_ENV === 'production') {
@@ -28,8 +32,4 @@ export default async function middleware(request: NextRequest) {
   }
 
   return NextResponse.next()
-}
-
-export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 }
