@@ -19,12 +19,15 @@
     "@payloadcms/db-mongodb": "3.0.0-beta.11",
     "@payloadcms/db-postgres": "3.0.0-beta.11",
     "@payloadcms/next": "3.0.0-beta.11",
+    "@payloadcms/plugin-nested-docs": "3.0.0-beta.11",
     "@payloadcms/richtext-lexical": "3.0.0-beta.11",
     "@payloadcms/richtext-slate": "3.0.0-beta.11",
     "@payloadcms/ui": "3.0.0-beta.11",
     "arctic": "^1.5.0",
     "autoprefixer": "^10.4.19",
+    "clsx": "^2.1.0",
     "cross-env": "^7.0.3",
+    "deepmerge": "^4.3.1",
     "jsonwebtoken": "^9.0.2",
     "next": "14.2.2",
     "oslo": "^1.2.0",
@@ -36,6 +39,7 @@
     "tailwindcss": "^3.4.3"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.12",
     "@types/node": "^20.12.7",
     "@types/react": "^18.2.78",
     "@types/react-dom": "^18.2.25",
