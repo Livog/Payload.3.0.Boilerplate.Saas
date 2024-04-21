@@ -7,7 +7,7 @@ export const getPayload = async () => {
   return await getPayloadFromPayload({ config: await configPromise })
 }
 
-export const getUser = async (): Promise<User | null> => {
+export const getCurrentUser = async (): Promise<User | null> => {
   const payload = await getPayload()
   const h = headers()
   const { user } = await payload.auth({ headers: h })

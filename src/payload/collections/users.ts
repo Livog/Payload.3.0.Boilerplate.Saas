@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload/types'
 
-export const COLLECTION_SLUG_USER = 'users'
+export const COLLECTION_SLUG_USER = 'users' as const
 
 export const users: CollectionConfig = {
   slug: COLLECTION_SLUG_USER,
