@@ -1,12 +1,14 @@
-import { OAuthLoginButtons } from '@/components/OAuthLoginButtons'
-import { auth } from '@/lib/auth'
+import LexicalContent from '@/components/LexicalContent'
+import fetchPage from '@/utils/fetchPage'
 
-const Page = async () => {
-  const user = await auth()
-  console.log('user', user)
+const Page = async ({}) => {
+  const page = await fetchPage('/')
   return (
-    <article>
-      <OAuthLoginButtons />
+    <article className="prose">
+      {page?.content?.root?.children && (
+        /** @ts-ignore */
+        <LexicalContent childrenNodes={page?.content?.root?.children} />
+      )}
     </article>
   )
 }

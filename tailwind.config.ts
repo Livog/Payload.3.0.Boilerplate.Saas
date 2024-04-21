@@ -1,3 +1,4 @@
+/** @type {import('tailwindcss').Config} */
 const config = {
   darkMode: 'class',
   content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
@@ -22,6 +23,6 @@ const config = {
       },
     },
   },
-  plugins: [],
+  plugins: [require('@tailwindcss/typography')],
 }
 export default config

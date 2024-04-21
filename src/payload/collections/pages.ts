@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload/types'
+import { pathField, slugField } from '@/payload/fields'
 
 export const COLLECTION_SLUG_PAGE = 'pages'
 
@@ -16,5 +17,7 @@ export const pages: CollectionConfig = {
       name: 'content',
       type: 'richText',
     },
+    slugField(),
+    pathField(),
   ],
 }
