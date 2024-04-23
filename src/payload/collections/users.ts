@@ -1,8 +1,26 @@
 import { auth } from '@/lib/auth'
+import { getAuthJsCookieName } from '@/lib/auth/edge'
+import parseCookieString from '@/utils/parseCookieString'
+import { isWithinExpirationDate } from 'oslo'
 import type { CollectionConfig } from 'payload/types'
-import { parseCookies, serializeCookie } from 'oslo/cookie'
 
-export const COLLECTION_SLUG_USER = 'users'
+const mockRequestAndResponseFromHeadersForNextAuth = (headers: Headers) => {
+  const request = {
+    headers,
+  } as any
+
+  const response = {
+    getHeader() {},
+    setCookie() {},
+    setHeader() {},
+    appendHeader() {},
+  } as any
+
+  return { request, response }
+}
+
+export const COLLECTION_SLUG_USER = 'users' as const
+export const COLLECTION_SLUG_SESSIONS = 'sessions' as const
 
 export const users: CollectionConfig = {
   slug: COLLECTION_SLUG_USER,
@@ -11,38 +29,42 @@ export const users: CollectionConfig = {
       path: '/refresh-token',
       method: 'post',
       async handler(request) {
-        const cookies = parseCookies(request.headers.get('Cookie') || '')
-        const req = {
-          headers: request.headers,
-          cookies: cookies.size > 0 ? Object.fromEntries(cookies) : null,
-        }
-        const res = new Response()
+        if (!request?.url) return new Response('No request URL provided', { status: 400 })
 
-        /** @ts-ignore */
-        const session = await auth(req, res)
-        const responseCookies = parseCookies(String(res.headers.getSetCookie()) || '')
-        const refreshedToken = responseCookies.get('__Secure-authjs.session-token') || responseCookies.get('authjs.session-token') || null
+        const requestUrl = new URL(request.url)
+        requestUrl.pathname = '/api/auth/session'
 
-        res.headers.set('Content-Type', 'application/json; charset=utf-8')
+        const newRequest = new Request(requestUrl.toString(), {
+          method: 'GET',
+          headers: new Headers(request.headers),
+        })
 
-        if (!session || !refreshedToken) {
-          res.headers.set('Set-Cookie', serializeCookie('__Secure-authjs.session-token', '', { expires: new Date(0) }))
-          res.headers.set('Set-Cookie', serializeCookie('authjs.session-token', '', { expires: new Date(0) }))
-          return new Response(JSON.stringify({ message: 'Token refresh failed' }), { status: 401, headers: res.headers })
-        }
+        try {
+          const response = await fetch(newRequest)
+          const data = await response.json()
 
-        return new Response(
-          JSON.stringify({
+          if (!response.ok) {
+            throw new Error('Failed to refresh token')
+          }
+
+          const responseCookies = parseCookieString(String(response.headers.get('Set-Cookie') || ''))
+          const authCooke = responseCookies?.[getAuthJsCookieName()] ?? null
+
+          const responseBody = JSON.stringify({
             message: 'Token refresh successful',
-            refreshedToken: refreshedToken,
-            exp: Math.floor(new Date(String(session?.expires)).getTime() / 1000),
-            user: session?.user,
-          }),
-          {
-            status: 200,
-            headers: res.headers,
-          },
-        )
+            refreshToken: authCooke?.value,
+            exp: authCooke && authCooke?.expires ? Math.floor(authCooke.expires.getTime() / 1000) : null,
+            user: data.user,
+          })
+
+          return new Response(responseBody, {
+            status: response.status,
+            headers: response.headers,
+          })
+        } catch (error) {
+          console.log(error)
+          return new Response(JSON.stringify({ message: 'Token refresh failed' }), { status: 401 })
+        }
       },
     },
   ],
@@ -51,22 +73,12 @@ export const users: CollectionConfig = {
       {
         name: 'next-auth',
         /** @ts-ignore */
-        authenticate: async ({ headers, cookies, payload }) => {
-          const req = {
-            headers,
-            cookies: cookies != null ? Object.fromEntries(cookies) : null,
-            payload,
-          } as any
-
-          const res = {
-            getHeader() {},
-            setCookie() {},
-            setHeader() {},
-            appendHeader() {},
-          } as any
-
-          const session = await auth(req, res)
-          if (!session || typeof session?.user?.email !== 'string') return null
+        authenticate: async ({ headers, payload }) => {
+          const { request, response } = mockRequestAndResponseFromHeadersForNextAuth(headers)
+          const session = await auth(request, response)
+          if (!session || typeof session?.user?.email !== 'string' || (session?.expires && !isWithinExpirationDate(new Date(session.expires)))) {
+            return null
+          }
           const { docs } = await payload.find({
             collection: COLLECTION_SLUG_USER,
             where: { email: { equals: session.user?.email } },
@@ -85,6 +97,7 @@ export const users: CollectionConfig = {
     { name: 'name', type: 'text', saveToJWT: true },
     { name: 'imageUrl', type: 'text', saveToJWT: true },
     { name: 'role', type: 'select', options: ['admin', 'user'], saveToJWT: true },
+    { name: 'emailVerified', type: 'date' },
     {
       name: 'accounts',
       type: 'array',
@@ -115,14 +128,19 @@ export const users: CollectionConfig = {
       ],
     },
   ],
-}
+} as const
 
 export const sessions: CollectionConfig = {
-  slug: 'sessions',
-  auth: false,
+  slug: COLLECTION_SLUG_SESSIONS,
   access: {
+    read: () => true,
+    create: () => false,
     update: () => false,
-    delete: () => false,
+    delete: () => true,
   },
-  fields: [],
-}
+  fields: [
+    { name: 'user', type: 'relationship', relationTo: COLLECTION_SLUG_USER, required: true, admin: { readOnly: true } },
+    { name: 'sessionToken', type: 'text', required: true, index: true, admin: { readOnly: true } },
+    { name: 'expires', type: 'date', admin: { readOnly: true, date: { pickerAppearance: 'dayAndTime' } }, required: true },
+  ],
+} as const

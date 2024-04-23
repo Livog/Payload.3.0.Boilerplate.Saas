@@ -11,6 +11,7 @@ export interface Config {
     users: User;
     pages: Page;
     media: Media;
+    sessions: Session;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
   };
@@ -26,6 +27,10 @@ export interface Config {
  */
 export interface User {
   id: string;
+  name?: string | null;
+  imageUrl?: string | null;
+  role?: ('admin' | 'user') | null;
+  emailVerified?: string | null;
   accounts?:
     | {
         provider?: string | null;
@@ -35,6 +40,7 @@ export interface User {
     | null;
   verificationTokens?:
     | {
+        identifier?: string | null;
         token?: string | null;
         expires?: string | null;
         id?: string | null;
@@ -91,6 +97,18 @@ export interface Media {
   filesize?: number | null;
   width?: number | null;
   height?: number | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sessions".
+ */
+export interface Session {
+  id: string;
+  user: string | User;
+  sessionToken: string;
+  expires: string;
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

@@ -1,3 +1,4 @@
+import { getAuthJsCookieName } from '@/lib/auth/edge'
 import { getToken } from '@auth/core/jwt'
 import { NextResponse, type NextRequest } from 'next/server'
 
@@ -6,12 +7,7 @@ export const config = {
 }
 
 export default async function middleware(request: NextRequest) {
-  let cookieName = 'authjs.session-token'
-  if (process.env.NODE_ENV === 'production') {
-    cookieName = '__Secure-' + cookieName
-  }
-
-  // Attempt to get the token to verify its existence
+  const cookieName = getAuthJsCookieName()
   const token = await getToken({
     req: request,
     salt: cookieName, // Ensure this matches how cookies are named in your getToken logic

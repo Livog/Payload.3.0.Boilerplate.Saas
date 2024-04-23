@@ -6,7 +6,7 @@ export function OAuthLoginButtons() {
       <form
         action={async () => {
           'use server'
-          await signIn('github')
+          await signIn('github', { redirectTo: '/admin' })
         }}
       >
         <button type="submit" className="px-6 py-2 rounded-md bg-black text-white">
