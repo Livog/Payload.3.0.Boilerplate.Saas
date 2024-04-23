@@ -84,6 +84,7 @@ export const users: CollectionConfig = {
             where: { email: { equals: session.user?.email } },
           })
           const user = docs?.at(0) || null
+          if (user && user.role !== 'admin') return null
           return {
             ...user,
             collection: COLLECTION_SLUG_USER,

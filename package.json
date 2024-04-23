@@ -28,7 +28,7 @@
     "@payloadcms/ui": "3.0.0-beta.12",
     "autoprefixer": "^10.4.19",
     "cross-env": "^7.0.3",
-    "next": "14.3.0-canary.7",
+    "next": "14.3.0-canary.19",
     "next-auth": "5.0.0-beta.16",
     "oslo": "^1.2.0",
     "payload": "3.0.0-beta.12",
