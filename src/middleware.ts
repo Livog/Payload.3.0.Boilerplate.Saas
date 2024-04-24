@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getToken } from '@auth/core/jwt'
 import { getAuthJsCookieName } from '@/lib/auth/edge'
+import { SESSION_STRATEGY } from '@/lib/auth/config'
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)']
 }
 
 const mutatResponseToRemoveAuthJsCookie = (response: NextResponse): NextResponse => {
@@ -12,7 +13,7 @@ const mutatResponseToRemoveAuthJsCookie = (response: NextResponse): NextResponse
     path: '/',
     expires: new Date(0),
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production'
   })
   return response
 }
@@ -31,7 +32,7 @@ const validateJwtTokenAndLogoutOnFailure = async (request: NextRequest): Promise
   const token = await getToken({
     req: request,
     salt: cookieName,
-    secret: process.env.AUTH_SECRET!,
+    secret: process.env.AUTH_SECRET!
   })
   if (token != null) return true
   const response = NextResponse.redirect(request.url)
@@ -40,7 +41,8 @@ const validateJwtTokenAndLogoutOnFailure = async (request: NextRequest): Promise
 }
 
 export default async function middleware(request: NextRequest) {
-  const sequentialMiddlewares = [handleLogoutResponse, validateJwtTokenAndLogoutOnFailure]
+  const sequentialMiddlewares = [handleLogoutResponse]
+  if (SESSION_STRATEGY === 'jwt') sequentialMiddlewares.push(validateJwtTokenAndLogoutOnFailure)
 
   for (const check of sequentialMiddlewares) {
     const result = await check(request)

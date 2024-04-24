@@ -1,3 +1,5 @@
+import { getSessionAndUser, getUserByEmail } from '@/lib/auth/adapter'
+import { ADMIN_ACCESS_ROLES, SESSION_STRATEGY } from '@/lib/auth/config'
 import { getAuthJsCookieName } from '@/lib/auth/edge'
 import parseCookieString from '@/utils/parseCookieString'
 import { getToken } from '@auth/core/jwt'
@@ -6,14 +8,14 @@ import type { CollectionConfig } from 'payload/types'
 
 const mockRequestAndResponseFromHeadersForNextAuth = (headers: Headers) => {
   const request = {
-    headers,
+    headers
   } as any
 
   const response = {
     getHeader() {},
     setCookie() {},
     setHeader() {},
-    appendHeader() {},
+    appendHeader() {}
   } as any
 
   return { request, response }
@@ -36,7 +38,7 @@ export const users: CollectionConfig = {
 
         const newRequest = new Request(requestUrl.toString(), {
           method: 'GET',
-          headers: new Headers(request.headers),
+          headers: new Headers(request.headers)
         })
 
         try {
@@ -54,52 +56,61 @@ export const users: CollectionConfig = {
             message: 'Token refresh successful',
             refreshToken: authCooke?.value,
             exp: authCooke && authCooke?.expires ? Math.floor(authCooke.expires.getTime() / 1000) : null,
-            user: data.user,
+            user: data.user
           })
 
           return new Response(responseBody, {
             status: response.status,
-            headers: response.headers,
+            headers: response.headers
           })
         } catch (error) {
           console.log(error)
           return new Response(JSON.stringify({ message: 'Token refresh failed' }), { status: 401 })
         }
-      },
-    },
+      }
+    }
   ],
   auth: {
     strategies: [
       {
         name: 'next-auth',
         /** @ts-ignore */
-        authenticate: async ({ headers, payload }) => {
-          const { request } = mockRequestAndResponseFromHeadersForNextAuth(headers)
-          const cookies = parseCookieString(headers.get('Cookie') || '')
+        authenticate: async ({ cookies, headers, payload }) => {
           const authJsCookieName = getAuthJsCookieName()
-          const authCookie = cookies?.[authJsCookieName] ?? null
-          const token = await getToken({
-            req: request,
-            salt: authJsCookieName,
-            secret: process.env.AUTH_SECRET!,
-          })
-          if (!token || typeof token?.email !== 'string' || (authCookie?.expires && !isWithinExpirationDate(new Date(authCookie.expires)))) {
-            return null
+          const authCookieValue = cookies?.get(authJsCookieName)
+          if (!authCookieValue) return null
+          const isJwt = authCookieValue ? authCookieValue.startsWith('eyJ') && (authCookieValue.match(/\./g) || []).length === 2 : false // Loose check if is JWT.
+          if (SESSION_STRATEGY === 'database' && isJwt) return null // We just switched between strategies, all old sessions are invalid.
+          if (SESSION_STRATEGY === 'database') {
+            const user = await getSessionAndUser({ payload, sessionToken: authCookieValue, collection: COLLECTION_SLUG_SESSIONS })
+            if (!user) return null
+            return {
+              ...user,
+              collection: COLLECTION_SLUG_USER
+            }
           }
-
-          const { docs } = await payload.find({
-            collection: COLLECTION_SLUG_USER,
-            where: { email: { equals: token.email } },
-          })
-          const user = docs?.at(0) || null
-          if (user && user.role !== 'admin') return null
-          return {
-            ...user,
-            collection: COLLECTION_SLUG_USER,
+          if (SESSION_STRATEGY === 'jwt') {
+            const { request } = mockRequestAndResponseFromHeadersForNextAuth(headers)
+            const token = await getToken({
+              req: request,
+              salt: authJsCookieName,
+              secret: process.env.AUTH_SECRET!
+            })
+            // @ts-ignore
+            if (!token || typeof token?.email !== 'string' || !token?.role || !ADMIN_ACCESS_ROLES.includes(token?.role)) {
+              return null
+            }
+            const user = await getUserByEmail({ payload, email: token.email, collection: COLLECTION_SLUG_USER })
+            if (!user) return null
+            return {
+              ...user,
+              collection: COLLECTION_SLUG_USER
+            }
           }
-        },
-      },
-    ],
+          return null
+        }
+      }
+    ]
   },
   access: {},
   fields: [
@@ -116,10 +127,10 @@ export const users: CollectionConfig = {
           type: 'row',
           fields: [
             { name: 'provider', type: 'text', admin: { readOnly: true } },
-            { name: 'providerAccountId', type: 'text', admin: { readOnly: true } },
-          ],
-        },
-      ],
+            { name: 'providerAccountId', type: 'text', admin: { readOnly: true } }
+          ]
+        }
+      ]
     },
     {
       name: 'verificationTokens',
@@ -131,12 +142,12 @@ export const users: CollectionConfig = {
           fields: [
             { name: 'identifier', type: 'text', admin: { readOnly: true } },
             { name: 'token', type: 'text', admin: { readOnly: true } },
-            { name: 'expires', type: 'date', admin: { readOnly: true } },
-          ],
-        },
-      ],
-    },
-  ],
+            { name: 'expires', type: 'date', admin: { readOnly: true } }
+          ]
+        }
+      ]
+    }
+  ]
 } as const
 
 export const sessions: CollectionConfig = {
@@ -145,11 +156,11 @@ export const sessions: CollectionConfig = {
     read: () => true,
     create: () => false,
     update: () => false,
-    delete: () => true,
+    delete: () => true
   },
   fields: [
     { name: 'user', type: 'relationship', relationTo: COLLECTION_SLUG_USER, required: true, admin: { readOnly: true } },
     { name: 'sessionToken', type: 'text', required: true, index: true, admin: { readOnly: true } },
-    { name: 'expires', type: 'date', admin: { readOnly: true, date: { pickerAppearance: 'dayAndTime' } }, required: true },
-  ],
+    { name: 'expires', type: 'date', admin: { readOnly: true, date: { pickerAppearance: 'dayAndTime' } }, required: true }
+  ]
 } as const

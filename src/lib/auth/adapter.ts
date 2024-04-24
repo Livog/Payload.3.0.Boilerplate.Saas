@@ -2,12 +2,11 @@ import 'server-only'
 import { COLLECTION_SLUG_SESSIONS, COLLECTION_SLUG_USER } from '@/payload/collections'
 import type { AdapterUser } from '@auth/core/adapters'
 import type { Adapter, AdapterUser as BaseAdapterUser } from 'next-auth/adapters'
-import { alphabet, generateRandomString } from 'oslo/crypto'
-import type { User } from '~/payload-types'
-import { DEFAULT_FIELDS_USER_IS_NOT_ALLOWED_TO_CHANGE, DEFAULT_USER_ROLE, SESSION_MAX_AGE } from './config'
 import { isWithinExpirationDate } from 'oslo'
+import { alphabet, generateRandomString } from 'oslo/crypto'
 import type { BasePayload, GeneratedTypes } from 'payload'
-import { getPayload } from '../payload'
+import type { Session, User } from '~/payload-types'
+import { DEFAULT_FIELDS_USER_IS_NOT_ALLOWED_TO_CHANGE, DEFAULT_USER_ROLE, SESSION_MAX_AGE } from './config'
 
 declare module '@auth/core/adapters' {
   interface AdapterUser extends BaseAdapterUser, User {}
@@ -18,14 +17,92 @@ type CollectionTypeMap = {
   sessions: typeof COLLECTION_SLUG_SESSIONS
 }
 
+export const getUserByEmail = async ({
+  payload,
+  email,
+  collection
+}: {
+  payload: Payload
+  email: string
+  collection: typeof COLLECTION_SLUG_USER
+}): Promise<User | null> => {
+  const { docs } = await (
+    await payload
+  ).find({
+    collection,
+    where: { email: { equals: email } }
+  })
+  return docs.at(0) ?? null
+}
+
+export const getUserByAccount = async ({
+  payload,
+  providerAccountId,
+  provider,
+  collection
+}: {
+  payload: Payload
+  providerAccountId: string
+  provider: string
+  collection: typeof COLLECTION_SLUG_USER
+}): Promise<User | null> => {
+  const { docs } = await (
+    await payload
+  ).find({
+    collection,
+    where: {
+      'accounts.provider': { equals: provider },
+      'accounts.providerAccountId': { equals: providerAccountId }
+    }
+  })
+  return docs.at(0) ?? null
+}
+
+export const getSessionAndUser = async ({
+  payload,
+  sessionToken,
+  collection
+}: {
+  payload: Payload
+  sessionToken: string
+  collection: typeof COLLECTION_SLUG_SESSIONS
+}): Promise<{ session: Session; user: User } | null> => {
+  const { docs: sessions } = await (
+    await payload
+  ).find({
+    collection,
+    depth: 1, // So that we get user object aswell.
+    where: { sessionToken: { equals: sessionToken } }
+  })
+  const session = sessions.at(0)
+  if (!session || !session.user || typeof session.user !== 'object') return null
+
+  const sessionExpires = new Date(session.expires)
+
+  if (!isWithinExpirationDate(sessionExpires)) {
+    await (
+      await payload
+    ).delete({
+      collection,
+      where: { sessionToken: { equals: sessionToken } }
+    })
+    if (process.env.AUTH_VERPOSE) {
+      console.log('Deleted expired session', sessionToken)
+    }
+    return null
+  }
+
+  return { session, user: session?.user }
+}
+
+type Payload = BasePayload<GeneratedTypes> | Promise<BasePayload<GeneratedTypes>>
+
 type PayloadAdapterOptions = {
   collectionNames?: Partial<CollectionTypeMap>
   defaultUserRole?: string
   fieldsUserIsNotAllowedToChange?: string[]
   defaultMaxAge?: number
 }
-
-type Payload = BasePayload<GeneratedTypes> | Promise<BasePayload<GeneratedTypes>>
 
 export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions = {}): Adapter {
   options.collectionNames ??= {}
@@ -46,22 +123,8 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
       name: user.name,
       image: user.imageUrl,
       role: user.role,
-      emailVerified: user?.emailVerified ? new Date(user.emailVerified) : null,
+      emailVerified: user?.emailVerified ? new Date(user.emailVerified) : null
     }
-  }
-
-  const getUserByAccount = async ({ providerAccountId, provider }: { providerAccountId: string; provider: string }) => {
-    const { docs } = await (
-      await payload
-    ).find({
-      collection: userCollectionName,
-      where: {
-        'accounts.provider': { equals: provider },
-        'accounts.providerAccountId': { equals: providerAccountId },
-      },
-    })
-    const user = docs.at(0)
-    return user ? ensureAdapterUser(user) : null
   }
 
   return {
@@ -70,7 +133,7 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         ...data,
         password: generateRandomString(32, alphabet('a-z', '0-9')),
         imageUrl: data.image,
-        role: options.defaultUserRole,
+        role: options.defaultUserRole
       }
 
       if (process.env.AUTH_VERPOSE) {
@@ -81,7 +144,7 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
       ).create({
         collection: userCollectionName,
         // @ts-ignore
-        data: userData,
+        data: userData
       })
       return ensureAdapterUser(user) || null
     },
@@ -91,7 +154,7 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         await payload
       ).findByID({
         collection: userCollectionName,
-        id,
+        id
       })
       if (process.env.AUTH_VERPOSE) {
         console.log('getUser', user, 'id', id)
@@ -100,15 +163,9 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
     },
 
     async getUserByEmail(email) {
-      const { docs } = await (
-        await payload
-      ).find({
-        collection: userCollectionName,
-        where: { email: { equals: email } },
-      })
-      const user = docs.at(0)
+      const user = await getUserByEmail({ payload, email, collection: userCollectionName })
       if (process.env.AUTH_VERPOSE) {
-        console.log('getUserByEmail', docs.at(0), 'email', email)
+        console.log('getUserByEmail', user, 'email', email)
       }
       return user ? ensureAdapterUser(user) : null
     },
@@ -127,7 +184,7 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         collection: userCollectionName,
         id: data.id,
         // @ts-ignore
-        data,
+        data
       })
       const user = docs.at(0)
       if (!user) {
@@ -144,7 +201,7 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         await payload
       ).delete({
         collection: userCollectionName,
-        id,
+        id
       })
     },
 
@@ -153,7 +210,7 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         await payload
       ).findByID({
         collection: userCollectionName,
-        id: data.userId,
+        id: data.userId
       })
       if (process.env.AUTH_VERPOSE) {
         console.log('linkAccount', user, 'data', data)
@@ -165,8 +222,8 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         collection: userCollectionName,
         id: data.userId,
         data: {
-          accounts: [...(user?.accounts || []), data],
-        },
+          accounts: [...(user?.accounts || []), data]
+        }
       })
       if (process.env.AUTH_VERPOSE) {
         console.log('linkAccount -> updatedUser', updatedUser)
@@ -174,7 +231,7 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
     },
 
     async unlinkAccount({ provider, providerAccountId }) {
-      const user = await getUserByAccount({ provider, providerAccountId })
+      const user = await getUserByAccount({ payload, provider, providerAccountId, collection: userCollectionName })
       if (!user || !Array.isArray(user?.accounts)) return
       const updatedAccounts = user.accounts.filter((account) => account.provider !== provider || account.providerAccountId !== providerAccountId)
       await (
@@ -183,8 +240,8 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         collection: userCollectionName,
         id: user.id,
         data: {
-          accounts: updatedAccounts,
-        },
+          accounts: updatedAccounts
+        }
       })
     },
 
@@ -193,7 +250,7 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         await payload
       ).find({
         collection: userCollectionName,
-        where: { email: { equals: identifier } },
+        where: { email: { equals: identifier } }
       })
       const user = docs.at(0)
       if (process.env.AUTH_VERPOSE) {
@@ -206,21 +263,21 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         collection: userCollectionName,
         id: user.id,
         data: {
-          verificationTokens: [...(user?.verificationTokens || []), { identifier, token, expires: expires.toISOString() }],
-        },
+          verificationTokens: [...(user?.verificationTokens || []), { identifier, token, expires: expires.toISOString() }]
+        }
       })
       return {
         token,
         expires,
-        identifier,
+        identifier
       }
     },
     async getUserByAccount({ providerAccountId, provider }) {
-      const user = await getUserByAccount({ provider, providerAccountId })
+      const user = await getUserByAccount({ payload, provider, providerAccountId, collection: userCollectionName })
       if (process.env.AUTH_VERPOSE) {
         console.log('getUserByAccount', user, 'providerAccountId', providerAccountId, 'provider', provider)
       }
-      return user || null
+      return user ? ensureAdapterUser(user) : null
     },
 
     async createSession({ sessionToken, userId, expires }) {
@@ -231,53 +288,28 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         await payload
       ).create({
         collection: COLLECTION_SLUG_SESSIONS,
-        data: { sessionToken, user: userId, expires: expires.toISOString() },
+        data: { sessionToken, user: userId, expires: expires.toISOString() }
       })
       const sessionUserId = typeof session?.user === 'string' ? session?.user : session?.user?.id
       const sessionExpires = session?.expires ? new Date(session.expires) : new Date(Date.now() + options.defaultMaxAge!)
       return {
         sessionToken: session?.sessionToken,
         userId: sessionUserId,
-        expires: sessionExpires,
+        expires: sessionExpires
       }
     },
 
     async getSessionAndUser(sessionToken) {
-      const { docs: sessions } = await (
-        await payload
-      ).find({
-        collection: sessionCollectionName,
-        where: { sessionToken: { equals: sessionToken } },
-        depth: 1,
-      })
-      if (process.env.AUTH_VERPOSE) {
-        console.log('getSessionAndUser', sessions, 'sessionToken', sessionToken)
-      }
-      const session = sessions.at(0)
-      if (!session) return null
-      const sessionExpires = new Date(session.expires)
-
-      if (!isWithinExpirationDate(sessionExpires)) {
-        await (
-          await payload
-        ).delete({
-          collection: sessionCollectionName,
-          where: { sessionToken: { equals: sessionToken } },
-        })
-        if (process.env.AUTH_VERPOSE) {
-          console.log('Deleted expired session', sessionToken)
-        }
-        return null
-      }
-
-      if (typeof session?.user !== 'object') return null
+      const maybeSessionAndUser = await getSessionAndUser({ payload, sessionToken, collection: sessionCollectionName })
+      if (!maybeSessionAndUser || !maybeSessionAndUser.user || typeof maybeSessionAndUser.user !== 'object') return null
+      const { session, user } = maybeSessionAndUser
       return {
         session: {
           sessionToken: session?.sessionToken,
-          userId: session?.user?.id,
-          expires: sessionExpires,
+          userId: typeof session?.user === 'string' ? session?.user : session?.user?.id,
+          expires: new Date(session.expires)
         },
-        user: ensureAdapterUser(session?.user),
+        user: ensureAdapterUser(user)
       }
     },
 
@@ -286,7 +318,7 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         await payload
       ).find({
         collection: sessionCollectionName,
-        where: { sessionToken: { equals: sessionToken } },
+        where: { sessionToken: { equals: sessionToken } }
       })
       if (process.env.AUTH_VERPOSE) {
         console.log('updateSession', sessionToken, expires)
@@ -299,13 +331,13 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
       ).update({
         collection: sessionCollectionName,
         id: session.id,
-        data: { expires: expires.toISOString() },
+        data: { expires: expires.toISOString() }
       })
       const sessionUserId = typeof updatedSession?.user === 'string' ? updatedSession?.user : updatedSession?.user?.id
       return {
         sessionToken: updatedSession?.sessionToken,
         userId: sessionUserId,
-        expires: new Date(updatedSession?.expires),
+        expires: new Date(updatedSession?.expires)
       }
     },
 
@@ -314,8 +346,8 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         await payload
       ).delete({
         collection: sessionCollectionName,
-        where: { sessionToken: { equals: sessionToken } },
+        where: { sessionToken: { equals: sessionToken } }
       })
-    },
+    }
   }
 }
