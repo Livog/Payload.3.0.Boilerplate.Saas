@@ -82,10 +82,10 @@ export const users: CollectionConfig = {
           const isJwt = authCookieValue ? authCookieValue.startsWith('eyJ') && (authCookieValue.match(/\./g) || []).length === 2 : false // Loose check if is JWT.
           if (SESSION_STRATEGY === 'database' && isJwt) return null // We just switched between strategies, all old sessions are invalid.
           if (SESSION_STRATEGY === 'database') {
-            const user = await getSessionAndUser({ payload, sessionToken: authCookieValue, collection: COLLECTION_SLUG_SESSIONS })
-            if (!user) return null
+            const maybeSessionAndUser = await getSessionAndUser({ payload, sessionToken: authCookieValue, collection: COLLECTION_SLUG_SESSIONS })
+            if (!maybeSessionAndUser) return null
             return {
-              ...user,
+              ...maybeSessionAndUser.user,
               collection: COLLECTION_SLUG_USER
             }
           }
