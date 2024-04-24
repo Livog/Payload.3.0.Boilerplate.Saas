@@ -1,6 +1,5 @@
 import type { NextAuthConfig } from 'next-auth'
 import GitHub from 'next-auth/providers/github'
-import 'server-only'
 
 export const SESSION_STRATEGY = 'jwt' as 'jwt' | 'database'
 export const SESSION_MAX_AGE = 86400 as const

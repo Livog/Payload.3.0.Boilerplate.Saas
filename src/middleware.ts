@@ -6,10 +6,6 @@ export const config = {
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 }
 
-const getLoginRedirect = (request: NextRequest): NextResponse => {
-  return NextResponse.redirect(new URL('/admin/login', request.url))
-}
-
 const mutatResponseToRemoveAuthJsCookie = (response: NextResponse): NextResponse => {
   const cookieName = getAuthJsCookieName()
   response.cookies.set(cookieName, '', {

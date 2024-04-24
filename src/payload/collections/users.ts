@@ -1,6 +1,6 @@
-import { auth } from '@/lib/auth'
 import { getAuthJsCookieName } from '@/lib/auth/edge'
 import parseCookieString from '@/utils/parseCookieString'
+import { getToken } from '@auth/core/jwt'
 import { isWithinExpirationDate } from 'oslo'
 import type { CollectionConfig } from 'payload/types'
 
@@ -74,14 +74,22 @@ export const users: CollectionConfig = {
         name: 'next-auth',
         /** @ts-ignore */
         authenticate: async ({ headers, payload }) => {
-          const { request, response } = mockRequestAndResponseFromHeadersForNextAuth(headers)
-          const session = await auth(request, response)
-          if (!session || typeof session?.user?.email !== 'string' || (session?.expires && !isWithinExpirationDate(new Date(session.expires)))) {
+          const { request } = mockRequestAndResponseFromHeadersForNextAuth(headers)
+          const cookies = parseCookieString(headers.get('Cookie') || '')
+          const authJsCookieName = getAuthJsCookieName()
+          const authCookie = cookies?.[authJsCookieName] ?? null
+          const token = await getToken({
+            req: request,
+            salt: authJsCookieName,
+            secret: process.env.AUTH_SECRET!,
+          })
+          if (!token || typeof token?.email !== 'string' || (authCookie?.expires && !isWithinExpirationDate(new Date(authCookie.expires)))) {
             return null
           }
+
           const { docs } = await payload.find({
             collection: COLLECTION_SLUG_USER,
-            where: { email: { equals: session.user?.email } },
+            where: { email: { equals: token.email } },
           })
           const user = docs?.at(0) || null
           if (user && user.role !== 'admin') return null

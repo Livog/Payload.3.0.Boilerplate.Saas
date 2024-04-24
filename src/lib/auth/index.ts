@@ -1,18 +1,30 @@
-import 'server-only'
-import { getFieldsToSign, getSanitizedUserCollection } from '@/lib/payload'
-import { COLLECTION_SLUG_USER } from '@/payload/collections'
+import { getPayload } from '@/lib/payload'
+import { COLLECTION_SLUG_USER, users } from '@/payload/collections'
 import NextAuth from 'next-auth'
 import { getFieldsToSign as getFieldsToSignPayload } from 'payload/auth'
+import 'server-only'
 import { PayloadAdapter } from './adapter'
 import authConfig from './config'
 
-export const { auth, handlers, signIn, signOut } = NextAuth((req) => {
+export const { auth, handlers, signIn, signOut } = NextAuth(() => {
+  const payload = getPayload()
   return {
-    adapter: PayloadAdapter(),
+    adapter: PayloadAdapter(payload),
     callbacks: {
       async jwt({ token, user }) {
         const userId = (token?.id || token?.sub || user?.id) as string | number
-        const fieldsToSign = await getFieldsToSign(userId)
+        const dbUser = await (
+          await payload
+        ).findByID({
+          collection: COLLECTION_SLUG_USER,
+          id: userId,
+        })
+        const fieldsToSign = getFieldsToSignPayload({
+          // @ts-ignore
+          user: dbUser,
+          email: dbUser.email,
+          collectionConfig: users,
+        })
         token = {
           ...token,
           ...(fieldsToSign || {}),
@@ -21,13 +33,12 @@ export const { auth, handlers, signIn, signOut } = NextAuth((req) => {
       },
       async session({ session, token }) {
         session.user = session.user || {}
-        const sanitizedUsersCollection = await getSanitizedUserCollection()
-        if (!sanitizedUsersCollection || !token) return session
+        if (!token) return session
         const fieldsToSign = getFieldsToSignPayload({
           // @ts-ignore
           user: token,
           email: session.user.email,
-          collectionConfig: sanitizedUsersCollection,
+          collectionConfig: users,
         })
 
         session.user = {

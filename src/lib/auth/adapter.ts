@@ -1,5 +1,4 @@
 import 'server-only'
-import { getPayload } from '@/lib/payload'
 import { COLLECTION_SLUG_SESSIONS, COLLECTION_SLUG_USER } from '@/payload/collections'
 import type { AdapterUser } from '@auth/core/adapters'
 import type { Adapter, AdapterUser as BaseAdapterUser } from 'next-auth/adapters'
@@ -7,6 +6,8 @@ import { alphabet, generateRandomString } from 'oslo/crypto'
 import type { User } from '~/payload-types'
 import { DEFAULT_FIELDS_USER_IS_NOT_ALLOWED_TO_CHANGE, DEFAULT_USER_ROLE, SESSION_MAX_AGE } from './config'
 import { isWithinExpirationDate } from 'oslo'
+import type { BasePayload, GeneratedTypes } from 'payload'
+import { getPayload } from '../payload'
 
 declare module '@auth/core/adapters' {
   interface AdapterUser extends BaseAdapterUser, User {}
@@ -24,7 +25,9 @@ type PayloadAdapterOptions = {
   defaultMaxAge?: number
 }
 
-export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
+type Payload = BasePayload<GeneratedTypes> | Promise<BasePayload<GeneratedTypes>>
+
+export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions = {}): Adapter {
   options.collectionNames ??= {}
   options.collectionNames.users ??= COLLECTION_SLUG_USER
   options.collectionNames.sessions ??= COLLECTION_SLUG_SESSIONS
@@ -48,8 +51,9 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
   }
 
   const getUserByAccount = async ({ providerAccountId, provider }: { providerAccountId: string; provider: string }) => {
-    const payload = await getPayload()
-    const { docs } = await payload.find({
+    const { docs } = await (
+      await payload
+    ).find({
       collection: userCollectionName,
       where: {
         'accounts.provider': { equals: provider },
@@ -69,11 +73,12 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
         role: options.defaultUserRole,
       }
 
-      const payload = await getPayload()
       if (process.env.AUTH_VERPOSE) {
         console.log('createUser', data)
       }
-      const user = await payload.create({
+      const user = await (
+        await payload
+      ).create({
         collection: userCollectionName,
         // @ts-ignore
         data: userData,
@@ -82,8 +87,9 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
     },
 
     async getUser(id) {
-      const payload = await getPayload()
-      const user = await payload.findByID({
+      const user = await (
+        await payload
+      ).findByID({
         collection: userCollectionName,
         id,
       })
@@ -94,8 +100,9 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
     },
 
     async getUserByEmail(email) {
-      const payload = await getPayload()
-      const { docs } = await payload.find({
+      const { docs } = await (
+        await payload
+      ).find({
         collection: userCollectionName,
         where: { email: { equals: email } },
       })
@@ -107,7 +114,6 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
     },
 
     async updateUser(data) {
-      const payload = await getPayload()
       ;(options.fieldsUserIsNotAllowedToChange || []).forEach((field: string) => {
         // @ts-ignore
         if (field in data) delete data[field]
@@ -115,7 +121,9 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
       if (process.env.AUTH_VERPOSE) {
         console.log('updateUser', data)
       }
-      const { docs } = await payload.update({
+      const { docs } = await (
+        await payload
+      ).update({
         collection: userCollectionName,
         id: data.id,
         // @ts-ignore
@@ -129,19 +137,21 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
     },
 
     async deleteUser(id) {
-      const payload = await getPayload()
       if (process.env.AUTH_VERPOSE) {
         console.log('deleteUser', id)
       }
-      await payload.delete({
+      await (
+        await payload
+      ).delete({
         collection: userCollectionName,
         id,
       })
     },
 
     async linkAccount(data) {
-      const payload = await getPayload()
-      const user = await payload.findByID({
+      const user = await (
+        await payload
+      ).findByID({
         collection: userCollectionName,
         id: data.userId,
       })
@@ -149,7 +159,9 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
         console.log('linkAccount', user, 'data', data)
       }
       if (!user) return null
-      const updatedUser = await payload.update({
+      const updatedUser = await (
+        await payload
+      ).update({
         collection: userCollectionName,
         id: data.userId,
         data: {
@@ -162,11 +174,12 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
     },
 
     async unlinkAccount({ provider, providerAccountId }) {
-      const payload = await getPayload()
       const user = await getUserByAccount({ provider, providerAccountId })
       if (!user || !Array.isArray(user?.accounts)) return
       const updatedAccounts = user.accounts.filter((account) => account.provider !== provider || account.providerAccountId !== providerAccountId)
-      await payload.update({
+      await (
+        await payload
+      ).update({
         collection: userCollectionName,
         id: user.id,
         data: {
@@ -176,8 +189,9 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
     },
 
     async createVerificationToken({ identifier, token, expires }) {
-      const payload = await getPayload()
-      const { docs } = await payload.find({
+      const { docs } = await (
+        await payload
+      ).find({
         collection: userCollectionName,
         where: { email: { equals: identifier } },
       })
@@ -186,7 +200,9 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
         console.log('createVerificationToken', 'identifier', identifier, 'user', user, 'token', token, 'expires', expires)
       }
       if (!user) return null
-      await payload.update({
+      await (
+        await payload
+      ).update({
         collection: userCollectionName,
         id: user.id,
         data: {
@@ -208,11 +224,12 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
     },
 
     async createSession({ sessionToken, userId, expires }) {
-      const payload = await getPayload()
       if (process.env.AUTH_VERPOSE) {
         console.log('createSession', sessionToken, userId, expires)
       }
-      const session = await payload.create({
+      const session = await (
+        await payload
+      ).create({
         collection: COLLECTION_SLUG_SESSIONS,
         data: { sessionToken, user: userId, expires: expires.toISOString() },
       })
@@ -226,8 +243,9 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
     },
 
     async getSessionAndUser(sessionToken) {
-      const payload = await getPayload()
-      const { docs: sessions } = await payload.find({
+      const { docs: sessions } = await (
+        await payload
+      ).find({
         collection: sessionCollectionName,
         where: { sessionToken: { equals: sessionToken } },
         depth: 1,
@@ -240,7 +258,9 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
       const sessionExpires = new Date(session.expires)
 
       if (!isWithinExpirationDate(sessionExpires)) {
-        await payload.delete({
+        await (
+          await payload
+        ).delete({
           collection: sessionCollectionName,
           where: { sessionToken: { equals: sessionToken } },
         })
@@ -262,8 +282,9 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
     },
 
     async updateSession({ sessionToken, expires }) {
-      const payload = await getPayload()
-      const { docs } = await payload.find({
+      const { docs } = await (
+        await payload
+      ).find({
         collection: sessionCollectionName,
         where: { sessionToken: { equals: sessionToken } },
       })
@@ -273,7 +294,9 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
       const session = docs.at(0)
       if (!session || !expires) return null
 
-      const updatedSession = await payload.update({
+      const updatedSession = await (
+        await payload
+      ).update({
         collection: sessionCollectionName,
         id: session.id,
         data: { expires: expires.toISOString() },
@@ -287,8 +310,9 @@ export function PayloadAdapter(options: PayloadAdapterOptions = {}): Adapter {
     },
 
     async deleteSession(sessionToken) {
-      const payload = await getPayload()
-      await payload.delete({
+      await (
+        await payload
+      ).delete({
         collection: sessionCollectionName,
         where: { sessionToken: { equals: sessionToken } },
       })

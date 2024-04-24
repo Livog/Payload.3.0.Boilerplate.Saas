@@ -5,8 +5,8 @@ import { getFieldsToSign as getFieldsToSignPayload } from 'payload/auth'
 import { SanitizedCollectionConfig } from 'payload/types'
 import type { User } from '~/payload-types'
 
-export async function getPayload(): Promise<ReturnType<typeof getPayloadInstance>> {
-  return await getPayloadInstance({ config: await configPromise })
+export async function getPayload(): ReturnType<typeof getPayloadInstance> {
+  return getPayloadInstance({ config: await configPromise })
 }
 
 export const getSanitizedUserCollection = async (): Promise<
