@@ -75,6 +75,7 @@ export const getSessionAndUser = async ({
     where: { sessionToken: { equals: sessionToken } }
   })
   const session = sessions.at(0)
+
   if (!session || !session.user || typeof session.user !== 'object') return null
 
   const sessionExpires = new Date(session.expires)
@@ -272,6 +273,7 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         identifier
       }
     },
+
     async getUserByAccount({ providerAccountId, provider }) {
       const user = await getUserByAccount({ payload, provider, providerAccountId, collection: userCollectionName })
       if (process.env.AUTH_VERPOSE) {

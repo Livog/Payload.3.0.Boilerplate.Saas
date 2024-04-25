@@ -3,8 +3,8 @@ import { ADMIN_ACCESS_ROLES, SESSION_STRATEGY } from '@/lib/auth/config'
 import { getAuthJsCookieName } from '@/lib/auth/edge'
 import parseCookieString from '@/utils/parseCookieString'
 import { getToken } from '@auth/core/jwt'
-import { isWithinExpirationDate } from 'oslo'
 import type { CollectionConfig } from 'payload/types'
+import { isAdmin, isAdminOrCurrentUser } from '@/payload/access'
 
 const mockRequestAndResponseFromHeadersForNextAuth = (headers: Headers) => {
   const request = {
@@ -79,8 +79,8 @@ export const users: CollectionConfig = {
           const authJsCookieName = getAuthJsCookieName()
           const authCookieValue = cookies?.get(authJsCookieName)
           if (!authCookieValue) return null
-          const isJwt = authCookieValue ? authCookieValue.startsWith('eyJ') && (authCookieValue.match(/\./g) || []).length === 2 : false // Loose check if is JWT.
-          if (SESSION_STRATEGY === 'database' && isJwt) return null // We just switched between strategies, all old sessions are invalid.
+          const isJwt = (authCookieValue || '').startsWith('eyJ') // Loose check if is JWT.
+          if ((SESSION_STRATEGY === 'database' && isJwt) || (SESSION_STRATEGY === 'jwt' && !isJwt)) return null // We just switched between strategies, all old sessions are invalid.
           if (SESSION_STRATEGY === 'database') {
             const maybeSessionAndUser = await getSessionAndUser({ payload, sessionToken: authCookieValue, collection: COLLECTION_SLUG_SESSIONS })
             if (!maybeSessionAndUser) return null
@@ -112,7 +112,12 @@ export const users: CollectionConfig = {
       }
     ]
   },
-  access: {},
+  access: {
+    read: isAdminOrCurrentUser,
+    create: isAdmin,
+    update: isAdmin,
+    delete: isAdminOrCurrentUser
+  },
   fields: [
     { name: 'name', type: 'text', saveToJWT: true },
     { name: 'imageUrl', type: 'text', saveToJWT: true },
@@ -153,14 +158,14 @@ export const users: CollectionConfig = {
 export const sessions: CollectionConfig = {
   slug: COLLECTION_SLUG_SESSIONS,
   access: {
-    read: () => true,
-    create: () => false,
-    update: () => false,
-    delete: () => true
+    read: isAdminOrCurrentUser,
+    create: isAdmin,
+    update: isAdmin,
+    delete: isAdmin
   },
   fields: [
-    { name: 'user', type: 'relationship', relationTo: COLLECTION_SLUG_USER, required: true, admin: { readOnly: true } },
-    { name: 'sessionToken', type: 'text', required: true, index: true, admin: { readOnly: true } },
-    { name: 'expires', type: 'date', admin: { readOnly: true, date: { pickerAppearance: 'dayAndTime' } }, required: true }
+    { name: 'user', type: 'relationship', relationTo: COLLECTION_SLUG_USER, required: true, admin: { readOnly: false } },
+    { name: 'sessionToken', type: 'text', required: true, index: true, admin: { readOnly: false } },
+    { name: 'expires', type: 'date', admin: { readOnly: false, date: { pickerAppearance: 'dayAndTime' } }, required: false }
   ]
 } as const
