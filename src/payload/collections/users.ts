@@ -112,6 +112,9 @@ export const users: CollectionConfig = {
       }
     ]
   },
+  admin: {
+    useAsTitle: 'email'
+  },
   access: {
     read: isAdminOrCurrentUser,
     create: isAdmin,
