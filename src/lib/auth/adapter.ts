@@ -9,6 +9,7 @@ import type { Session, User } from '~/payload-types'
 import { DEFAULT_FIELDS_USER_IS_NOT_ALLOWED_TO_CHANGE, DEFAULT_USER_ROLE, SESSION_MAX_AGE } from './config'
 
 declare module '@auth/core/adapters' {
+  // @ts-ignore
   interface AdapterUser extends BaseAdapterUser, User {}
 }
 
