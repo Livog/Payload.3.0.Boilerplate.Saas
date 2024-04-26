@@ -1,10 +1,13 @@
-import { getSessionAndUser, getUserByEmail } from '@/lib/auth/adapter'
+import { PayloadAdapter, getSessionAndUser, getUserByEmail } from '@/lib/auth/adapter'
 import { ADMIN_ACCESS_ROLES, SESSION_STRATEGY } from '@/lib/auth/config'
 import { getAuthJsCookieName } from '@/lib/auth/edge'
 import parseCookieString from '@/utils/parseCookieString'
 import { getToken } from '@auth/core/jwt'
 import type { CollectionConfig } from 'payload/types'
 import { isAdmin, isAdminOrCurrentUser } from '@/payload/access'
+import authConfig from '@/lib/auth/config'
+import NextAuth from 'next-auth'
+import { isWithinExpirationDate } from 'oslo'
 
 const mockRequestAndResponseFromHeadersForNextAuth = (headers: Headers) => {
   const request = {
@@ -75,39 +78,22 @@ export const users: CollectionConfig = {
       {
         name: 'next-auth',
         /** @ts-ignore */
-        authenticate: async ({ cookies, headers, payload }) => {
-          const authJsCookieName = getAuthJsCookieName()
-          const authCookieValue = cookies?.get(authJsCookieName)
-          if (!authCookieValue) return null
-          const isJwt = (authCookieValue || '').startsWith('eyJ') // Loose check if is JWT.
-          if ((SESSION_STRATEGY === 'database' && isJwt) || (SESSION_STRATEGY === 'jwt' && !isJwt)) return null // We just switched between strategies, all old sessions are invalid.
-          if (SESSION_STRATEGY === 'database') {
-            const maybeSessionAndUser = await getSessionAndUser({ payload, sessionToken: authCookieValue, collection: COLLECTION_SLUG_SESSIONS })
-            if (!maybeSessionAndUser) return null
-            return {
-              ...maybeSessionAndUser.user,
-              collection: COLLECTION_SLUG_USER
-            }
+        authenticate: async ({ headers, payload }) => {
+          const { auth } = NextAuth({
+            ...authConfig,
+            adapter: PayloadAdapter(payload)
+          })
+          const { request, response } = mockRequestAndResponseFromHeadersForNextAuth(headers)
+          const session = await auth(request, response)
+          const user = session?.user
+          if (!user || typeof user.email !== 'string' || (session?.expires && !isWithinExpirationDate(new Date(session.expires)))) return null
+
+          const dbUser = await getUserByEmail({ payload, email: user.email, collection: COLLECTION_SLUG_USER })
+          if (!dbUser || (typeof dbUser.role === 'string' && !ADMIN_ACCESS_ROLES.includes(dbUser?.role))) return null
+          return {
+            ...dbUser,
+            collection: COLLECTION_SLUG_USER
           }
-          if (SESSION_STRATEGY === 'jwt') {
-            const { request } = mockRequestAndResponseFromHeadersForNextAuth(headers)
-            const token = await getToken({
-              req: request,
-              salt: authJsCookieName,
-              secret: process.env.AUTH_SECRET!
-            })
-            // @ts-ignore
-            if (!token || typeof token?.email !== 'string' || !token?.role || !ADMIN_ACCESS_ROLES.includes(token?.role)) {
-              return null
-            }
-            const user = await getUserByEmail({ payload, email: token.email, collection: COLLECTION_SLUG_USER })
-            if (!user) return null
-            return {
-              ...user,
-              collection: COLLECTION_SLUG_USER
-            }
-          }
-          return null
         }
       }
     ]

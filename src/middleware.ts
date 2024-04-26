@@ -32,7 +32,8 @@ const validateJwtTokenAndLogoutOnFailure = async (request: NextRequest): Promise
   const token = await getToken({
     req: request,
     salt: cookieName,
-    secret: process.env.AUTH_SECRET!
+    secret: process.env.AUTH_SECRET!,
+    secureCookie: process.env.NODE_ENV === 'production'
   })
   console.log('validateJwtTokenAndLogoutOnFailure', token, cookieValue, '|||', cookieName, process.env.AUTH_SECRET!)
   if (token != null) return true
