@@ -106,7 +106,7 @@ export interface Session {
   id: string;
   user: string | User;
   sessionToken: string;
-  expires: string;
+  expires?: string | null;
   updatedAt: string;
   createdAt: string;
 }

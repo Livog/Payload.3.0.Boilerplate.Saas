@@ -1,4 +1,3 @@
-import 'server-only'
 import { COLLECTION_SLUG_SESSIONS, COLLECTION_SLUG_USER } from '@/payload/collections'
 import type { AdapterUser } from '@auth/core/adapters'
 import type { Adapter, AdapterUser as BaseAdapterUser } from 'next-auth/adapters'
@@ -79,7 +78,7 @@ export const getSessionAndUser = async ({
 
   if (!session || !session.user || typeof session.user !== 'object') return null
 
-  const sessionExpires = new Date(session.expires)
+  const sessionExpires = new Date(session?.expires || 0)
 
   if (!isWithinExpirationDate(sessionExpires)) {
     await (
@@ -310,7 +309,7 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
         session: {
           sessionToken: session?.sessionToken,
           userId: typeof session?.user === 'string' ? session?.user : session?.user?.id,
-          expires: new Date(session.expires)
+          expires: new Date(session?.expires || 0)
         },
         user: ensureAdapterUser(user)
       }
@@ -340,7 +339,7 @@ export function PayloadAdapter(payload: Payload, options: PayloadAdapterOptions 
       return {
         sessionToken: updatedSession?.sessionToken,
         userId: sessionUserId,
-        expires: new Date(updatedSession?.expires)
+        expires: new Date(updatedSession?.expires || 0)
       }
     },
 
