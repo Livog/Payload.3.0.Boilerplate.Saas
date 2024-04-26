@@ -34,6 +34,7 @@ const validateJwtTokenAndLogoutOnFailure = async (request: NextRequest): Promise
     salt: cookieName,
     secret: process.env.AUTH_SECRET!
   })
+  console.log('validateJwtTokenAndLogoutOnFailure', token, cookieValue, '|||', cookieName, process.env.AUTH_SECRET!)
   if (token != null) return true
   const response = NextResponse.redirect(request.url)
   mutatResponseToRemoveAuthJsCookie(response)
