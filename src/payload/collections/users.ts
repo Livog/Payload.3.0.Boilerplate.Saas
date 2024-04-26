@@ -1,13 +1,11 @@
-import { PayloadAdapter, getSessionAndUser, getUserByEmail } from '@/lib/auth/adapter'
-import { ADMIN_ACCESS_ROLES, SESSION_STRATEGY } from '@/lib/auth/config'
+import { PayloadAdapter, getUserByEmail } from '@/lib/auth/adapter'
+import authConfig, { ADMIN_ACCESS_ROLES } from '@/lib/auth/config'
 import { getAuthJsCookieName } from '@/lib/auth/edge'
-import parseCookieString from '@/utils/parseCookieString'
-import { getToken } from '@auth/core/jwt'
-import type { CollectionConfig } from 'payload/types'
 import { isAdmin, isAdminOrCurrentUser } from '@/payload/access'
-import authConfig from '@/lib/auth/config'
+import parseCookieString from '@/utils/parseCookieString'
 import NextAuth from 'next-auth'
 import { isWithinExpirationDate } from 'oslo'
+import type { CollectionConfig } from 'payload/types'
 
 const mockRequestAndResponseFromHeadersForNextAuth = (headers: Headers) => {
   const request = {
